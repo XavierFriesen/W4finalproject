@@ -1,0 +1,111 @@
+---
+title: "Week4Write_Up"
+author: "Xavier"
+date: "2023-09-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Loading libraries and setting seed 
+
+```{r, warning=FALSE, message=F}
+library(dplyr)
+library(caret)
+library(rattle)
+library(randomForest)
+library(rpart)
+set.seed(11111)
+
+```
+
+## Loading data
+
+```{r}
+data <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+test <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+
+```
+
+## creating dataset for training (70%) and testing (30%)
+```{r}
+inTrain <- createDataPartition(y=data$classe, p=0.7, list=FALSE)
+training <- data[inTrain, ]; testing <- data[-inTrain, ]
+dim(training); dim(testing)
+remove(data, inTrain)
+```
+
+## exploratory analysis and data cleaning
+```{r}
+#creating table of outcome variable 
+table(training$classe)
+
+```
+### removing near-zero variance variables 
+These variables do not add enough information to the model to be included
+```{r}
+#identifying near zero variables
+nearzero <- nearZeroVar(training, saveMetrics=TRUE)
+
+#getting list of all near zero variables
+nearzeronames <- colnames(training[names(training) %in% rownames(nearzero)[nearzero$nzv==T]])
+
+#subsetting data
+training <- subset(training, select = -which(names(training) %in% nearzeronames))
+ 
+remove(nearzero, nearzeronames)
+```
+
+
+### removing ID, since it is by definition a perfect predictor
+```{r}
+training <- training[c(-1)]
+```
+
+### removing variables with more than 50% NAs to reduce noise 
+```{r}
+#Calculate na proportion
+na_proportion <- apply(training, 2, function(x) sum(is.na(x)) / length(x))
+
+#identify columns with more than 50% NA values
+columns_to_remove <- names(na_proportion[na_proportion > 0.5])
+
+#subset
+training <- training[, !(names(training) %in% columns_to_remove)]
+remove(na_proportion, columns_to_remove)
+```
+
+
+## Running decision tree and random forests to later compare the best fit 
+
+My expectation is that the randomforest model will predict the data best
+
+```{r}
+training$classe <- as.factor(training$classe)
+modelDT <- rpart(classe ~ ., data=training, method="class") #decision tree
+modelRF <- randomForest(classe ~. , data=training) #random forest
+```
+
+
+## Plotting decision tree for interpretation
+```{r}
+fancyRpartPlot(modelDT)
+```
+
+## testing prediction algorithms on testing dataset 
+I have not removed any observations, nor recalculated any, so there is no transformation necessary of the testing dataset, since removed variables are of course not used in the tested model. 
+
+```{r}
+#decision tree
+testing$classe <- as.factor(testing$classe)
+pred <- predict(modelDT, testing, type = "class")
+confusionMatrix(pred, testing$classe)
+
+#random forest
+pred2 <- predict(modelRF, testing, type = "class")
+confusionMatrix(pred2, testing$classe)
+```
+
+Clearly the random forest algorithm performs, and also performs very well in an absolute sense, thus this is the preferred program. 
